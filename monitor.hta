@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=9">
+    <title>I/O Bottleneck Monitor</title>
+    <HTA:APPLICATION 
+        ID="MiniWidget"
+        APPLICATIONNAME="I/O Bottleneck Monitor"
+        BORDER="thin"
+        BORDERSTYLE="normal"
+        CAPTION="yes"
+        MAXIMIZEBUTTON="no"
+        MINIMIZEBUTTON="yes"
+        SHOWINTASKBAR="yes"
+        SINGLEINSTANCE="no"
+        SYSMENU="yes"
+        SCROLL="no"
+        DPIAWARE="yes"
+    />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 8px 10px;
+            overflow: hidden;
+            user-select: none;
+        }
+        .top-row {
+            width: 100%;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #1e293b;
+            overflow: hidden;
+        }
+        .brand {
+            float: left;
+            font-size: 11px;
+            font-weight: bold;
+            color: #38bdf8;
+            margin-top: 2px;
+        }
+        .actions {
+            float: right;
+        }
+        .icon-btn {
+            background-color: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .item-row {
+            background-color: #1e293b;
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
+            border: 1px solid #283548;
+            overflow: hidden;
+        }
+        .item-top {
+            width: 100%;
+            overflow: hidden;
+            margin-bottom: 3px;
+        }
+        .dev-label {
+            float: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        .badge {
+            float: right;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 6px;
+            border-radius: 10px;
+            background-color: #334155;
+            color: white;
+        }
+        .slider-line {
+            width: 100%;
+            overflow: hidden;
+        }
+        .ms-text {
+            float: left;
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+        input[type="range"] {
+            float: right;
+            width: 130px;
+            height: 14px;
+            cursor: pointer;
+            background: transparent;
+        }
+    </style>
+</head>
+<body onload="initMiniWidget()">
+
+    <div class="top-row">
+        <span class="brand">⚡ LIVE BUS STATUS</span>
+        <div class="actions">
+            <button class="icon-btn" id="toggleBtn" onclick="toggleMonitor()">⏸ Pause</button>
+        </div>
+    </div>
+
+    <!-- 1. Internal RAM -->
+    <div class="item-row">
+        <div class="item-top">
+            <span class="dev-label">Internal RAM</span>
+            <span class="badge" id="ramBadge">READY</span>
+        </div>
+        <div class="slider-line">
+            <span class="ms-text">Lag: <b id="ramVal">40</b>ms</span>
+            <input type="range" id="ramSlider" min="10" max="200" value="40" onchange="setVal('ramVal', this.value)" oninput="setVal('ramVal', this.value)">
+        </div>
+    </div>
+
+    <!-- 2. External PCI -->
+    <div class="item-row">
+        <div class="item-top">
+            <span class="dev-label">External PCI</span>
+            <span class="badge" id="pciBadge">READY</span>
+        </div>
+        <div class="slider-line">
+            <span class="ms-text">Lag: <b id="pciVal">120</b>ms</span>
+            <input type="range" id="pciSlider" min="50" max="500" value="120" onchange="setVal('pciVal', this.value)" oninput="setVal('pciVal', this.value)">
+        </div>
+    </div>
+
+    <!-- 3. External USB -->
+    <div class="item-row" style="margin-bottom: 0;">
+        <div class="item-top">
+            <span class="dev-label">External USB</span>
+            <span class="badge" id="usbBadge">READY</span>
+        </div>
+        <div class="slider-line">
+            <span class="ms-text">Lag: <b id="usbVal">420</b>ms</span>
+            <input type="range" id="usbSlider" min="50" max="600" value="420" onchange="setVal('usbVal', this.value)" oninput="setVal('usbVal', this.value)">
+        </div>
+    </div>
+
+    <script>
+        var timer = null;
+        var isRunning = false;
+
+        function initMiniWidget() {
+            var w = 285;
+            var h = 335;
+            var x = screen.availWidth - w - 15;
+            var y = screen.availHeight - h - 15;
+            window.resizeTo(w, h);
+            window.moveTo(x, y);
+            startMonitor();
+        }
+
+        function setVal(id, v) {
+            document.getElementById(id).innerText = v;
+        }
+
+        function toggleMonitor() {
+            if (isRunning) {
+                clearInterval(timer);
+                isRunning = false;
+                document.getElementById('toggleBtn').innerText = "▶ Start";
+                var ids = ['ramBadge', 'pciBadge', 'usbBadge'];
+                for (var i = 0; i < ids.length; i++) {
+                    var el = document.getElementById(ids[i]);
+                    el.innerText = "PAUSED";
+                    el.style.backgroundColor = "#475569";
+                }
+            } else {
+                startMonitor();
+            }
+        }
+
+        function startMonitor() {
+            isRunning = true;
+            document.getElementById('toggleBtn').innerText = "⏸ Pause";
+            timer = setInterval(function() {
+                updateBadge('ramSlider', 'ramBadge', 80);
+                updateBadge('pciSlider', 'pciBadge', 200);
+                updateBadge('usbSlider', 'usbBadge', 300);
+            }, 400);
+        }
+
+        function updateBadge(sId, bId, limit) {
+            var d = parseInt(document.getElementById(sId).value);
+            var live = d + Math.floor(Math.random() * 11) - 5;
+            var el = document.getElementById(bId);
+            if (live >= limit) {
+                el.innerText = "🚨 JAM (" + live + "ms)";
+                el.style.backgroundColor = "#dc2626";
+            } else if (live >= limit * 0.75) {
+                el.innerText = "⚠️ HIGH (" + live + "ms)";
+                el.style.backgroundColor = "#d97706";
+            } else {
+                el.innerText = "✅ OK (" + live + "ms)";
+                el.style.backgroundColor = "#16a34a";
+            }
+        }
+    </script>
+</body>
+</html>
